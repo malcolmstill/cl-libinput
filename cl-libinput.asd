@@ -1,9 +1,9 @@
 ;;;; cl-libinput.asd
 
 (asdf:defsystem #:cl-libinput
-  :description "Describe cl-libinput here"
+  :description "Common Lisp wrapper for libinput"
   :author "Malcolm Still <malcolm.still@gmail.com>"
-  :license "Specify license here"
+  :license "BSD3"
   :depends-on (#:cffi)
   :serial t
   :components ((:file "package")
