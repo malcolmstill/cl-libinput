@@ -3,7 +3,7 @@
 (asdf:defsystem #:cl-libinput
   :description "Common Lisp wrapper for libinput"
   :author "Malcolm Still <malcolm.still@gmail.com>"
-  :license "BSD3"
+  :license "BSD 3-Clause"
   :depends-on (#:cffi)
   :serial t
   :components ((:file "package")
