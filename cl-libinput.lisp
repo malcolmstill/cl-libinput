@@ -102,7 +102,7 @@
     ((path :string) (flags :int) (user-data :pointer))
   (format t "Called open-restricted~%")
   (let* ((context user-data)
-	 (fd (sb-posix:open path flags)))
+	 (fd (nix:open path flags)))
     (format t "File descriptor ~A~%" fd)
     (when (< fd 0)
       (error "Failed to open ~A" path))
@@ -110,7 +110,7 @@
 
 (defcallback close-restricted :void
     ((fd :int) (user-data :pointer))
-  (sb-posix:close fd))
+  (nix:close fd))
 
 (defun make-libinput-interface ()
   (let ((interface (foreign-alloc '(:struct libinput-interface))))
@@ -123,6 +123,44 @@
 			      'close-restricted)
 	  (callback close-restricted))
     interface))
+
+(defmacro with-pointer-motion ((event time dx dy) &body body)
+  (let ((pointer-event (gensym "pointer-event")))
+    `(let* ((,time (event-pointer-get-time ,event))
+	    (,pointer-event (event-get-pointer-event ,event))
+	    (,dx (event-pointer-get-dx ,pointer-event))
+	    (,dy (event-pointer-get-dy ,pointer-event)))
+       ,@body)))
+
+(defmacro with-pointer-button ((event time button state) &body body)
+  (let ((pointer-event (gensym "pointer-event")))
+    `(let* ((,time (event-pointer-get-time ,event))
+	    (,pointer-event (event-get-pointer-event ,event))
+	    (,button (event-pointer-get-button ,pointer-event))
+	    (,state (event-pointer-get-button-state ,pointer-event)))
+       ,@body)))
+
+(defmacro with-keyboard-key ((event time key state) &body body)
+  (let ((keyboard-event (gensym "keyboard-event")))
+    `(let* ((,time (event-keyboard-get-time ,event))
+	    (,keyboard-event (event-get-keyboard-event ,event))
+	    (,state (event-keyboard-get-key-state ,keyboard-event))
+	    (,key (event-keyboard-get-key ,keyboard-event)))
+       ,@body)))
+
+#|
+(defun handle-event-context (context event)
+  (when (not (null-pointer-p event))
+    (let ((type (event-get-type event)))
+      (cond
+	((= type keyboard-key) (progn
+				 (format t "fd: ~A~%" (get-fd context))
+				 (handle-keyboard event)))
+	((= type pointer-motion) (handle-pointer-motion event))
+	((= type pointer-button) (progn
+				   (format t "fd: ~A~%" (get-fd context))
+				   (handle-pointer-button event)))))
+    (event-destroy event)))
 
 (defun handle-keyboard (event)
   (let* ((keyboard-event (event-get-keyboard-event event))
@@ -152,63 +190,45 @@
 	((= type pointer-button) (handle-pointer-button event))))
     (event-destroy event)))
 
-(defmacro with-pointer-motion ((event time dx dy) &body body)
-  (let ((pointer-event (gensym "pointer-event")))
-    `(let* ((,time (event-pointer-get-time ,event))
-	    (,pointer-event (event-get-pointer-event ,event))
-	    (,dx (event-pointer-get-dx ,pointer-event))
-	    (,dy (event-pointer-get-dy ,pointer-event)))
-       ,@body)))
-
-(defmacro with-pointer-button ((event time button state) &body body)
-  (let ((pointer-event (gensym "pointer-event")))
-    `(let* ((,time (event-pointer-get-time ,event))
-	    (,pointer-event (event-get-pointer-event ,event))
-	    (,button (event-pointer-get-button ,pointer-event))
-	    (,state (event-pointer-get-button-state ,pointer-event)))
-       ,@body)))
-
-(defmacro with-keyboard-key ((event time key state) &body body)
-  (let ((keyboard-event (gensym "keyboard-event")))
-    `(let* ((,time (event-keyboard-get-time ,event))
-	    (,keyboard-event (event-get-keyboard-event ,event))
-	    (,state (event-keyboard-get-key-state ,keyboard-event))
-	    (,key (event-keyboard-get-key ,keyboard-event)))
-       ,@body)))
-
 (defun event-loop (context)
   (dispatch context)
   (let ((event (get-event context)))
     (loop :while (not (null-pointer-p event))
        :do (progn
-	     (handle-event event)
-	     (setf event (get-event context)))))
-  (event-loop context))
+	     (handle-event-context context event)
+	     (setf event (get-event context))))))
 
-#|
-(defun test (path)
+(defun test-2fd (path-1 path-2)
   (let* ((interface (make-libinput-interface))
-	 (context (path-create-context interface (null-pointer)))
-	 (device (path-add-device context path))
-	 (fd (get-fd context)))
-    (sb-alien:with-alien ((fds (sb-alien:struct sb-unix:pollfd)))
-      (format t "Context: ~A, device: ~A, fd: ~A~%" context device fd)
-      (setf (sb-alien:slot fds 'sb-unix:fd) fd
-	    (sb-alien:slot fds 'sb-unix:events) sb-unix:pollin
-	    (sb-alien:slot fds 'sb-unix:revents) 0)
-      (loop :do (progn
-		  ;;(sb-unix:unix-simple-poll fds 1 -1)
-		  (sb-unix:unix-poll fds 1 -1)
-		  (event-loop context))))))
-|#
+	 (context-1 (path-create-context interface (null-pointer)))
+	 (fd-1 (get-fd context-1))
+	 (context-2 (path-create-context interface (null-pointer)))
+	 (fd-2 (get-fd context-2)))
+    (path-add-device context-1 path-1)
+    (path-add-device context-2 path-2)
+    (nix:with-pollfds (pollfds
+		       (one fd-1 nix:pollin)
+		       (two fd-2 nix:pollin))
+      (loop :do
+	 (let ((event (nix:poll pollfds 2 -1)))
+	   (when event
+	     (when (= (nix:poll-return-event one) 1)
+	       (event-loop context-1))
+	     (when (= (nix:poll-return-event two) 1)
+	       (event-loop context-2))))))))
 
-(defun test (&rest paths)
+(defun test-alt (&rest paths)
   (let* ((interface (make-libinput-interface))
 	 (context (path-create-context interface (null-pointer)))
 	 (fd (get-fd context)))
     (mapcar (lambda (path)
 	      (path-add-device context path))
 	    paths)
-    (loop :do (progn
-		(sb-unix:unix-simple-poll fd :input -1)
-		(event-loop context)))))
+    (nix:with-pollfds (pollfds
+		       (pollfd fd nix:pollin))
+      (loop :with ret = (nix:poll pollfds 1 -1)
+	 :do (when ret
+	       (event-loop context))))))
+
+
+|#
