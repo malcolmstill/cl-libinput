@@ -25,11 +25,31 @@
   (context :pointer)
   (path :string))
 
+(defcfun ("libinput_path_remove_device" path-remove-device) :void
+  (device :pointer))
+
 (defcfun ("libinput_get_fd" get-fd) :int
   (context :pointer))
 
 (defcfun ("libinput_dispatch" dispatch) :int
   (context :pointer))
+
+(defparameter device-cap-keyboard 0)
+(defparameter device-cap-pointer 1)
+(defparameter device-cap-touch 2)
+(defparameter device-cap-tablet-tool 3)
+(defparameter device-cap-tablet-pad 4)
+(defparameter device-cap-gesture 5)
+
+(defcfun ("libinput_device_has_capability" device-has-capability) :int
+  (device :pointer)
+  (capability :int))
+
+(defcfun ("libinput_device_ref" device-ref) :pointer
+  (device :pointer))
+
+(defcfun ("libinput_device_unref" device-unref) :pointer
+  (device :pointer))
 
 (defcfun ("libinput_get_event" get-event) :pointer
   (context :pointer))

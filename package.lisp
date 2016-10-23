@@ -6,8 +6,18 @@
    unref
    path-create-context
    path-add-device
+   path-remove-device
    get-fd
    dispatch
+   device-ref
+   device-unref
+   device-cap-keyboard
+   device-cap-pointer
+   device-cap-touch
+   device-cap-tablet-tool
+   device-cap-tablet-pad 
+   device-cap-gesture
+   device-has-capability
    get-event
    event-get-type
    none
