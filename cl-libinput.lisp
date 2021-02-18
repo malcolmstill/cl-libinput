@@ -5,9 +5,11 @@
 ;;; "cl-libinput" goes here. Hacks and glory await!
 
 (define-foreign-library libinput
-    (:unix (:or "/usr/lib64/libinput.so"
-                "/usr/lib64/libinput.so.10"
-                "/usr/lib/x86_64-linux-gnu/libinput.so.10"))
+  (:unix (:or "libinput.so.10"
+              "libinput.so"
+              "/usr/lib64/libinput.so"
+              "/usr/lib64/libinput.so.10"
+              "/usr/lib/x86_64-linux-gnu/libinput.so.10"))
   (t (:default "libinput")))
 
 (use-foreign-library libinput)
